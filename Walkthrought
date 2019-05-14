@@ -1,0 +1,213 @@
+
+--django-admin startproject project_name
+django-admin startproject mysite
+
+--Check if project is working
+python manage.py runserver
+
+--Create new app
+python manage.py startapp polls
+
+--First view polls/views.py
+from django.http import HttpResponse
+def index(request):
+    return HttpResponse("Hello, world. You're at the polls index.")
+
+-- add urls.py to polls app
+
+-- add view polls/urls.py
+from django.urls import path
+from . import views
+urlpatterns = [
+    path('', views.index, name='index'),
+]
+
+-- urls pointer mysite/urls.py project colects all apps
+from django.contrib import admin
+from django.urls import include, path
+urlpatterns = [
+    path('polls/', include('polls.urls')),
+    path('admin/', admin.site.urls),
+]
+
+--accesing app
+http://localhost:8000/polls/
+
+--database migration for admin to work
+python manage.py migrate
+
+-- models is like db objects? creation where. Create first model polls/models.py
+from django.db import models
+class Question(models.Model):
+    question_text = models.CharField(max_length=200)
+    pub_date = models.DateTimeField('date published')
+class Choice(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+    choice_text = models.CharField(max_length=200)
+    votes = models.IntegerField(default=0)
+
+--register app mysite/settings.py
+INSTALLED_APPS = [
+    'polls.apps.PollsConfig',
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+]
+
+--python manage.py sqlmigrate polls 0001 test for insert into db?
+--insert into pools app 0001 entry
+python manage.py sqlmigrate polls 0001
+
+--migrates temp insertation
+python manage.py migrate
+
+--python manage.py shell
+>>> from polls.models import Choice, Question
+>>> Question.objects.all()
+>>> from django.utils import timezone
+>>> q = Question(question_text="What's new?", pub_date=timezone.now())
+>>> q.save()
+>>> q.id
+>>> q.question_text
+>>> q.pub_date
+>>> q.question_text = "What's up?"
+>>> q.save()
+>>> Question.objects.all()
+
+--edit model pols/models.py
+from django.db import models
+class Question(models.Model):
+    # ...
+    def __str__(self):
+        return self.question_text
+class Choice(models.Model):
+    # ...
+    def __str__(self):
+        return self.choice_text
+
+--add custom model to models
+import datetime
+from django.db import models
+from django.utils import timezone
+class Question(models.Model):
+    # ...
+    def was_published_recently(self):
+        return self.pub_date >= timezone.now() - datetime.timedelta(days=1)
+
+--manage.py shell
+>>> from polls.models import Choice, Question
+>>> Question.objects.all()
+<QuerySet [<Question: What's up?>]>
+>>> Question.objects.filter(id=1)
+<QuerySet [<Question: What's up?>]>
+>>> Question.objects.filter(question_text__startswith='What')
+<QuerySet [<Question: What's up?>]>
+>>> from django.utils import timezone
+>>> current_year = timezone.now().year
+>>> Question.objects.get(pub_date__year=current_year)
+<Question: What's up?>
+>>> Question.objects.get(id=2)
+Traceback (most recent call last):
+  File "<console>", line 1, in <module>
+  File "/home/rolandas/Desktop/Programavimas/Polls_app/venv/lib/python3.6/site-packages/django/db/models/manager.py", line 82, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+  File "/home/rolandas/Desktop/Programavimas/Polls_app/venv/lib/python3.6/site-packages/django/db/models/query.py", line 408, in get
+    self.model._meta.object_name
+polls.models.Question.DoesNotExist: Question matching query does not exist.
+>>> Question.objects.get(pk=1)
+<Question: What's up?>
+>>> q = Question.objects.get(pk=1)
+>>> q.was_published_recently()
+True
+>>> q = Question.objects.get(pk=1)
+>>> q.choice_set.all()
+<QuerySet []>
+>>> q.choice_set.create(choice_text='Not much', votes=0)
+<Choice: Not much>
+>>> q.choice_set.create(choice_text='The sky', votes=0)
+<Choice: The sky>
+>>> c = q.choice_set.create(choice_text='Just hacking again', votes=0)
+>>> c.question
+<Question: What's up?>
+>>> q.choice_set.all()
+<QuerySet [<Choice: Not much>, <Choice: The sky>, <Choice: Just hacking again>]>
+>>> q.choice_set.count()
+3
+>>> Choice.objects.filter(question__pub_date__year=current_year)
+<QuerySet [<Choice: Not much>, <Choice: The sky>, <Choice: Just hacking again>]>
+>>> c = q.choice_set.filter(choice_text__startswith='Just hacking')
+>>> c.delete()
+(1, {'polls.Choice': 1})
+>>> q.choice_set.all()
+<QuerySet [<Choice: Not much>, <Choice: The sky>]>
+
+--create admin
+python manage.py createsuperuser
+
+--modofiebale admin polls/admin.py polls app accesable in project admin
+from django.contrib import admin
+from .models import Question
+admin.site.register(Question)
+
+--more views polls/views
+def detail(request, question_id):
+    return HttpResponse("You're looking at question %s." % question_id)
+def results(request, question_id):
+    response = "You're looking at the results of question %s."
+    return HttpResponse(response % question_id)
+def vote(request, question_id):
+    return HttpResponse("You're voting on question %s." % question_id)
+
+-- add polls/urls
+from django.urls import path
+from . import views
+urlpatterns = [
+    # ex: /polls/
+    path('', views.index, name='index'),
+    # ex: /polls/5/
+    path('<int:question_id>/', views.detail, name='detail'),
+    # ex: /polls/5/results/
+    path('<int:question_id>/results/', views.results, name='results'),
+    # ex: /polls/5/vote/
+    path('<int:question_id>/vote/', views.vote, name='vote'),
+]
+
+--dont delete from views
+def index(request):
+    return HttpResponse("Hello, world. You're at the polls index.")
+
+--moddify index in polls/views.py
+from django.http import HttpResponse
+from .models import Question
+def index(request):
+    latest_question_list = Question.objects.order_by('-pub_date')[:5]
+    output = ', '.join([q.question_text for q in latest_question_list])
+    return HttpResponse(output)
+
+--create templates polls/templates/polls/index.html
+{% if latest_question_list %}
+    <ul>
+    {% for question in latest_question_list %}
+        <li><a href="/polls/{{ question.id }}/">{{ question.question_text }}</a></li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>No polls are available.</p>
+{% endif %}
+
+
+--updating views
+from django.http import HttpResponse
+from django.template import loader
+from .models import Question
+def index(request):
+    latest_question_list = Question.objects.order_by('-pub_date')[:5]
+    template = loader.get_template('polls/index.html')
+    context = {
+        'latest_question_list': latest_question_list,
+    }
+    return HttpResponse(template.render(context, request))
+
